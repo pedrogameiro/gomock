@@ -20,18 +20,15 @@ import (
 	"golang.org/x/tools/imports"
 )
 
-const usage = `gomock [-dir directory] <recv> <iface>
+const usage = `gomock [-dir directory] <package> <recv> <iface>
 
 gomock generates mocks for recv that implement iface.
 
 Examples:
 
-gomock 'f *File' io.Reader
-gomock Murmur hash.Hash
-gomock -dir $GOPATH/src/github.com/josharian/impl Murmur hash.Hash
-
-Don't forget the single quotes around the receiver type
-to prevent shell globbing.
+gomock mocks File io.Reader
+gomock mocks Murmur hash.Hash
+gomock -dir $GOPATH/src/github.com/josharian/impl mocks Murmur hash.Hash
 `
 
 var (
@@ -328,9 +325,10 @@ var tmplMethodDeclaration = template.Must(template.New("test").Parse(methodDecla
 // genStubs will panic.
 // genStubs won't generate stubs for
 // alrzeady implemented methods of receiver.
-func genStubs(recv string, fns []Func, implemented map[string]bool) []byte {
+func genStubs(packageName, recv string, fns []Func, implemented map[string]bool) []byte {
 	var buf bytes.Buffer
 
+	buf.Write([]byte("package " + packageName + "\n"))
 	for i, fn := range fns {
 		if implemented[fn.Name] {
 			continue
@@ -368,18 +366,6 @@ func genStubs(recv string, fns []Func, implemented map[string]bool) []byte {
 		panic(err.Error() + string(buf.Bytes()))
 	}
 	return pretty
-}
-
-// validReceiver reports whether recv is a valid receiver expression.
-func validReceiver(recv string) bool {
-	if recv == "" {
-		// The parse will parse empty receivers, but we don't want to accept them,
-		// since it won't generate a usable code snippet.
-		return false
-	}
-	fset := token.NewFileSet()
-	_, err := parser.ParseFile(fset, "", "package hack\nfunc ("+recv+") Foo()", 0)
-	return err == nil
 }
 
 // commentsBefore reports whether commentGroups precedes a field.
@@ -422,15 +408,13 @@ func flattenCommentMap(m ast.CommentMap) string {
 func main() {
 	flag.Parse()
 
-	if len(flag.Args()) < 2 {
+	if len(flag.Args()) < 3 {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
 	}
 
-	recv, iface := flag.Arg(0), flag.Arg(1)
-	if !validReceiver(recv) {
-		fatal(fmt.Sprintf("invalid receiver: %q", recv))
-	}
+	packageName, recv, iface := flag.Arg(0), flag.Arg(1), flag.Arg(2)
+	recv = "m *" + recv
 
 	if *flagSrcDir == "" {
 		if dir, err := os.Getwd(); err == nil {
@@ -449,7 +433,7 @@ func main() {
 		fatal(err)
 	}
 
-	src := genStubs(recv, fns, implemented)
+	src := genStubs(packageName, recv, fns, implemented)
 	fmt.Print(string(src))
 }
 

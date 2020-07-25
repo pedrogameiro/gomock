@@ -221,11 +221,11 @@ func (p Pkg) funcsig(f *ast.Field, cmap ast.CommentMap) Func {
 	typ := f.Type.(*ast.FuncType)
 	if typ.Params != nil {
 		for _, field := range typ.Params.List {
-			for _, param := range p.params(field) {
+			for i, param := range p.params(field) {
 				// only for method parameters:
 				// assign a blank identifier "_" to an anonymous parameter
 				if param.Name == "" {
-					param.Name = "_"
+					param.Name = "p" + strconv.Itoa(i)
 				}
 				if param.Type[0:3] == "..." {
 					param.Variadic = true
@@ -306,17 +306,13 @@ const stub = "// {{.Name}} Mock\n" +
 	"({{range .Res}}{{.Name}} {{.Type}}, {{end}})" +
 	"{\n" +
 	`if {{.RecvVar}}.{{.Name}}Mock == nil { {{.RecvVar}}.T.Fatal("Unimplemented mock {{.Recv}}.{{.Name}} was called") }` + "\n" +
-	`return {{.RecvVar}}.{{.Name}}Mock` +
+	`{{if .Res}}return{{end}} {{.RecvVar}}.{{.Name}}Mock` +
 	`({{range .Params}}{{.Name}}{{if .Variadic }}...{{end}},  {{end}})` +
 	"\n}\n\n"
 
-//type UIClient struct {
-//	T                  testing.T
-//	BrowseSequenceMock func(ctx context.Context, in *musicUI.Sequence, opts ...grpc.CallOption) (*musicUI.SequenceResponse, error)
-//}
 const mockStruct = "// {{.RecvName}} Mock\n" +
 	"type {{.RecvName}} struct {\n" +
-	"T testing.T \n"
+	"T *testing.T \n"
 
 const methodDeclaration = "{{.Name}}Mock func" +
 	"({{range .Params}}{{.Name}} {{.Type}}, {{end}})" +

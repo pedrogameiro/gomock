@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/josharian/impl/testdata"
+	"github.com/pedrogameiro/gomock/testdata"
 )
 
 type errBool bool

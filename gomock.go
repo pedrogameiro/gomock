@@ -1,4 +1,4 @@
-// impl generates method stubs for implementing an interface.
+// gomock generates method stubs for implementing an interface.
 package main
 
 import (
@@ -20,15 +20,15 @@ import (
 	"golang.org/x/tools/imports"
 )
 
-const usage = `impl [-dir directory] <recv> <iface>
+const usage = `gomock [-dir directory] <recv> <iface>
 
-impl generates method stubs for recv to implement iface.
+gomock generates mocks for recv that implement iface.
 
 Examples:
 
-impl 'f *File' io.Reader
-impl Murmur hash.Hash
-impl -dir $GOPATH/src/github.com/josharian/impl Murmur hash.Hash
+gomock 'f *File' io.Reader
+gomock Murmur hash.Hash
+gomock -dir $GOPATH/src/github.com/josharian/impl Murmur hash.Hash
 
 Don't forget the single quotes around the receiver type
 to prevent shell globbing.
@@ -195,7 +195,9 @@ func (p Pkg) params(field *ast.Field) []Param {
 
 // Method represents a method signature.
 type Method struct {
-	Recv string
+	Recv     string
+	RecvVar  string
+	RecvName string
 	Func
 }
 
@@ -209,8 +211,9 @@ type Func struct {
 
 // Param represents a parameter in a function or method signature.
 type Param struct {
-	Name string
-	Type string
+	Name     string
+	Type     string
+	Variadic bool
 }
 
 func (p Pkg) funcsig(f *ast.Field, cmap ast.CommentMap) Func {
@@ -223,6 +226,9 @@ func (p Pkg) funcsig(f *ast.Field, cmap ast.CommentMap) Func {
 				// assign a blank identifier "_" to an anonymous parameter
 				if param.Name == "" {
 					param.Name = "_"
+				}
+				if param.Type[0:3] == "..." {
+					param.Variadic = true
 				}
 				fn.Params = append(fn.Params, param)
 			}
@@ -292,33 +298,78 @@ func funcs(iface string, srcDir string) ([]Func, error) {
 	return fns, nil
 }
 
-const stub = "{{if .Comments}}{{.Comments}}{{end}}" +
+// "{{range $i,$e := .Params}}{{if $i}},{{end}}{{.Name}}  {{end}}" +
+const stub = "// {{.Name}} Mock\n" +
+	"{{if .Comments}}{{.Comments}}{{end}}" +
 	"func ({{.Recv}}) {{.Name}}" +
 	"({{range .Params}}{{.Name}} {{.Type}}, {{end}})" +
 	"({{range .Res}}{{.Name}} {{.Type}}, {{end}})" +
-	"{\n" + "panic(\"not implemented\") // TODO: Implement" + "\n}\n\n"
+	"{\n" +
+	`if {{.RecvVar}}.{{.Name}}Mock == nil { {{.RecvVar}}.T.Fatal("Unimplemented mock {{.Recv}}.{{.Name}} was called") }` + "\n" +
+	`return {{.RecvVar}}.{{.Name}}Mock` +
+	`({{range .Params}}{{.Name}}{{if .Variadic }}...{{end}},  {{end}})` +
+	"\n}\n\n"
+
+//type UIClient struct {
+//	T                  testing.T
+//	BrowseSequenceMock func(ctx context.Context, in *musicUI.Sequence, opts ...grpc.CallOption) (*musicUI.SequenceResponse, error)
+//}
+const mockStruct = "// {{.RecvName}} Mock\n" +
+	"type {{.RecvName}} struct {\n" +
+	"T testing.T \n"
+
+const methodDeclaration = "{{.Name}}Mock func" +
+	"({{range .Params}}{{.Name}} {{.Type}}, {{end}})" +
+	"({{range .Res}}{{.Name}} {{.Type}}, {{end}})\n"
 
 var tmpl = template.Must(template.New("test").Parse(stub))
+var tmplMockStruct = template.Must(template.New("test").Parse(mockStruct))
+var tmplMethodDeclaration = template.Must(template.New("test").Parse(methodDeclaration))
 
 // genStubs prints nicely formatted method stubs
 // for fns using receiver expression recv.
 // If recv is not a valid receiver expression,
 // genStubs will panic.
 // genStubs won't generate stubs for
-// already implemented methods of receiver.
+// alrzeady implemented methods of receiver.
 func genStubs(recv string, fns []Func, implemented map[string]bool) []byte {
 	var buf bytes.Buffer
+
+	for i, fn := range fns {
+		if implemented[fn.Name] {
+			continue
+		}
+		recvVar := strings.Split(recv, " ")[0]
+		recvName := strings.Split(recv, " ")[1][1:]
+		meth := Method{Recv: recv, Func: fn, RecvName: recvName, RecvVar: recvVar}
+
+		if i == 0 {
+			tmplMockStruct.Execute(&buf, meth)
+		}
+
+		tmplMethodDeclaration.Execute(&buf, meth)
+
+		if i == len(fns)-1 {
+			buf.Write([]byte("}\n"))
+		}
+
+	}
+
 	for _, fn := range fns {
 		if implemented[fn.Name] {
 			continue
 		}
-		meth := Method{Recv: recv, Func: fn}
+		recvVar := strings.Split(recv, " ")[0]
+		recvName := strings.Split(recv, " ")[1][1:]
+		meth := Method{Recv: recv, Func: fn, RecvName: recvName, RecvVar: recvVar}
+
 		tmpl.Execute(&buf, meth)
+
 	}
 
 	pretty, err := format.Source(buf.Bytes())
 	if err != nil {
-		panic(err)
+		panic(err.Error() + string(buf.Bytes()))
 	}
 	return pretty
 }

@@ -1,4 +1,4 @@
-module github.com/josharian/impl
+module github.com/pedrogameiro/gomock
 
 go 1.14
 

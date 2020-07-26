@@ -19,19 +19,21 @@ import (
 	"golang.org/x/tools/imports"
 )
 
-const usageParameters = `<interface>
-Generates mocks for a go interface. Full path to package can be used.
+const usageParameters = `<package> <interface>
+Generates mocks for a go interface. 
+
+<package>
+	Package name or path to the package of interface to mock
 
 <interface>
-    PackageName.InterfaceName
-	PackagePath.InterfaceName
+	Name of the interface to mock
 
 Examples:
-    gomock hash.Hash
-    gomock github.com/path/package.InterfaceName
+    gomock hash Hash
+    gomock golang.org/x/tools/godoc/analysis Link 
 
-    gomock --package mymocks io.Reader
-    gomock --directory $GOPATH/src/github.com/josharian/impl hash.Hash
+    gomock --package testutils io.Reader
+    gomock --directory $GOPATH/src/github.com/pedrogameiro/gomock hash.Hash
 `
 
 // findInterface returns the import path and identifier of an interface.
@@ -427,21 +429,16 @@ func main() {
 	getopt.Parse()
 
 	argsLen := len(getopt.Args())
-	if *optHelp || argsLen < 1 || argsLen > 1 {
+	if *optHelp || argsLen < 2 || argsLen > 2 {
 		getopt.Usage()
 		os.Exit(0)
 	}
 
-	iface := getopt.Arg(0)
-	ifaceSplit := strings.Split(iface, ".")
-	if len(ifaceSplit) < 2 {
-		getopt.Usage()
-		os.Exit(0)
-	}
-	ifacePath := strings.Join(ifaceSplit[0:len(ifaceSplit)-1], ".")
-	ifaceName := ifaceSplit[len(ifaceSplit)-1]
+	ifacePath := getopt.Arg(0)
+	ifaceName := getopt.Arg(1)
 	recv := "m *" + ifaceName
 
+	iface := ifacePath + "." + ifaceName
 	fns, astImpt, err := funcs(iface, *optDir)
 	if err != nil {
 		fatal(err)

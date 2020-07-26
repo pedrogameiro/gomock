@@ -3,7 +3,6 @@ package main
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -17,23 +16,18 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/pborman/getopt"
 	"golang.org/x/tools/imports"
 )
 
-const usage = `gomock [-dir directory] <package> <recv> <iface>
-
-gomock generates mocks for recv that implement iface.
+const usageParameters = `<interface>
+gomock generates mocks for a go inerface.
 
 Examples:
-
-gomock mocks File io.Reader
-gomock mocks Murmur hash.Hash
-gomock -dir $GOPATH/src/github.com/josharian/impl mocks Murmur hash.Hash
+    gomock --package mymocks io.Reader
+    gomock hash.Hash
+    gomock --directory $GOPATH/src/github.com/josharian/impl hash.Hash
 `
-
-var (
-	flagSrcDir = flag.String("dir", "", "package source directory, useful for vendored code")
-)
 
 // findInterface returns the import path and identifier of an interface.
 // For example, given "http.ResponseWriter", findInterface returns
@@ -406,34 +400,40 @@ func flattenCommentMap(m ast.CommentMap) string {
 }
 
 func main() {
-	flag.Parse()
-
-	if len(flag.Args()) < 3 {
-		fmt.Fprint(os.Stderr, usage)
-		os.Exit(2)
+	pwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
 	}
 
-	packageName, recv, iface := flag.Arg(0), flag.Arg(1), flag.Arg(2)
-	recv = "m *" + recv
+	getopt.SetParameters(usageParameters)
+	optDir := getopt.StringLong("directory", 'd', pwd, "package source directory, useful for vendored code")
+	optPKGName := getopt.StringLong("package", 'p', "mocks", "package name")
+	optHelp := getopt.BoolLong("help", 'h', "Help")
+	getopt.Parse()
 
-	if *flagSrcDir == "" {
-		if dir, err := os.Getwd(); err == nil {
-			*flagSrcDir = dir
-		}
+	argsLen := len(getopt.Args())
+	if *optHelp || argsLen < 1 || argsLen > 1 {
+		getopt.Usage()
+		os.Exit(0)
 	}
 
-	fns, err := funcs(iface, *flagSrcDir)
+	iface := getopt.Arg(0)
+
+	ifaceSplit := strings.Split(iface, ".")
+	recv := "m *" + ifaceSplit[len(ifaceSplit)-1]
+
+	fns, err := funcs(iface, *optDir)
 	if err != nil {
 		fatal(err)
 	}
 
 	// Get list of already implemented funcs
-	implemented, err := implementedFuncs(fns, recv, *flagSrcDir)
+	implemented, err := implementedFuncs(fns, recv, *optDir)
 	if err != nil {
 		fatal(err)
 	}
 
-	src := genStubs(packageName, recv, fns, implemented)
+	src := genStubs(*optPKGName, recv, fns, implemented)
 	fmt.Print(string(src))
 }
 

@@ -324,9 +324,6 @@ func genStubs(packageName, recv string, fns []Func, implemented map[string]bool)
 
 	buf.Write([]byte("package " + packageName + "\n"))
 	for i, fn := range fns {
-		if implemented[fn.Name] {
-			continue
-		}
 		recvVar := strings.Split(recv, " ")[0]
 		recvName := strings.Split(recv, " ")[1][1:]
 		meth := Method{Recv: recv, Func: fn, RecvName: recvName, RecvVar: recvVar}
@@ -344,9 +341,6 @@ func genStubs(packageName, recv string, fns []Func, implemented map[string]bool)
 	}
 
 	for _, fn := range fns {
-		if implemented[fn.Name] {
-			continue
-		}
 		recvVar := strings.Split(recv, " ")[0]
 		recvName := strings.Split(recv, " ")[1][1:]
 		meth := Method{Recv: recv, Func: fn, RecvName: recvName, RecvVar: recvVar}

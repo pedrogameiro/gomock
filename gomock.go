@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/build"
-	"go/format"
 	"go/parser"
 	"go/printer"
 	"go/token"
@@ -21,7 +20,7 @@ import (
 )
 
 const usageParameters = `<interface>
-gomock generates mocks for a go inerface.
+gomock generates mocks for a go interface.
 
 Examples:
     gomock --package mymocks io.Reader
@@ -102,10 +101,10 @@ type Spec struct {
 }
 
 // typeSpec locates the *ast.TypeSpec for type id in the import path.
-func typeSpec(path string, id string, srcDir string) (Pkg, Spec, error) {
+func typeSpec(path string, id string, srcDir string) (Pkg, Spec, []*ast.ImportSpec, error) {
 	pkg, err := build.Import(path, srcDir, 0)
 	if err != nil {
-		return Pkg{}, Spec{}, fmt.Errorf("couldn't find package %s: %v", path, err)
+		return Pkg{}, Spec{}, nil, fmt.Errorf("couldn't find package %s: %v", path, err)
 	}
 
 	fset := token.NewFileSet() // share one fset across the whole package
@@ -132,11 +131,11 @@ func typeSpec(path string, id string, srcDir string) (Pkg, Spec, error) {
 				}
 				p := Pkg{Package: pkg, FileSet: fset}
 				s := Spec{TypeSpec: spec, CommentMap: cmap.Filter(decl)}
-				return p, s, nil
+				return p, s, f.Imports, nil
 			}
 		}
 	}
-	return Pkg{}, Spec{}, fmt.Errorf("type %s not found in %s", id, path)
+	return Pkg{}, Spec{}, nil, fmt.Errorf("type %s not found in %s", id, path)
 }
 
 // gofmt pretty-prints e.
@@ -245,39 +244,40 @@ var errorInterface = []Func{{
 // funcs returns the set of methods required to implement iface.
 // It is called funcs rather than methods because the
 // function descriptions are functions; there is no receiver.
-func funcs(iface string, srcDir string) ([]Func, error) {
+func funcs(iface string, srcDir string) ([]Func, []*ast.ImportSpec, error) {
 	// Special case for the built-in error interface.
 	if iface == "error" {
-		return errorInterface, nil
+		return errorInterface, nil, nil
 	}
 
 	// Locate the interface.
 	path, id, err := findInterface(iface, srcDir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Parse the package and find the interface declaration.
-	p, spec, err := typeSpec(path, id, srcDir)
+	p, spec, astImpt, err := typeSpec(path, id, srcDir)
 	if err != nil {
-		return nil, fmt.Errorf("interface %s not found: %s", iface, err)
+		return nil, nil, fmt.Errorf("interface %s not found: %s", iface, err)
 	}
 	idecl, ok := spec.Type.(*ast.InterfaceType)
 	if !ok {
-		return nil, fmt.Errorf("not an interface: %s", iface)
+		return nil, nil, fmt.Errorf("not an interface: %s", iface)
 	}
 
 	if idecl.Methods == nil {
-		return nil, fmt.Errorf("empty interface: %s", iface)
+		return nil, nil, fmt.Errorf("empty interface: %s", iface)
 	}
 
 	var fns []Func
 	for _, fndecl := range idecl.Methods.List {
 		if len(fndecl.Names) == 0 {
 			// Embedded interface: recurse
-			embedded, err := funcs(p.fullType(fndecl.Type), srcDir)
+			var embedded []Func
+			embedded, astImpt, err = funcs(p.fullType(fndecl.Type), srcDir)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			fns = append(fns, embedded...)
 			continue
@@ -286,10 +286,9 @@ func funcs(iface string, srcDir string) ([]Func, error) {
 		fn := p.funcsig(fndecl, spec.CommentMap.Filter(fndecl))
 		fns = append(fns, fn)
 	}
-	return fns, nil
+	return fns, astImpt, nil
 }
 
-// "{{range $i,$e := .Params}}{{if $i}},{{end}}{{.Name}}  {{end}}" +
 const stub = "// {{.Name}} Mock\n" +
 	"{{if .Comments}}{{.Comments}}{{end}}" +
 	"func ({{.Recv}}) {{.Name}}" +
@@ -319,10 +318,26 @@ var tmplMethodDeclaration = template.Must(template.New("test").Parse(methodDecla
 // genStubs will panic.
 // genStubs won't generate stubs for
 // alrzeady implemented methods of receiver.
-func genStubs(packageName, recv string, fns []Func, implemented map[string]bool) []byte {
+func genStubs(packageName, recv string, fns []Func, implemented map[string]bool, srcDir string, astImpt []*ast.ImportSpec, ifacePath string) []byte {
 	var buf bytes.Buffer
 
 	buf.Write([]byte("package " + packageName + "\n"))
+
+	buf.Write([]byte("import (\n"))
+	buf.Write([]byte(`"` + ifacePath + `"` + "\n"))
+	if astImpt != nil {
+		for _, i := range astImpt {
+			if i.Path == nil {
+				continue
+			}
+			if i.Name != nil {
+				buf.Write([]byte(i.Name.Name + " "))
+			}
+			buf.Write([]byte(i.Path.Value + "\n"))
+		}
+	}
+	buf.Write([]byte(")\n"))
+
 	for i, fn := range fns {
 		recvVar := strings.Split(recv, " ")[0]
 		recvName := strings.Split(recv, " ")[1][1:]
@@ -349,7 +364,7 @@ func genStubs(packageName, recv string, fns []Func, implemented map[string]bool)
 
 	}
 
-	pretty, err := format.Source(buf.Bytes())
+	pretty, err := imports.Process(srcDir+"/mock.go", buf.Bytes(), nil)
 	if err != nil {
 		panic(err.Error() + string(buf.Bytes()))
 	}
@@ -412,11 +427,16 @@ func main() {
 	}
 
 	iface := getopt.Arg(0)
-
 	ifaceSplit := strings.Split(iface, ".")
-	recv := "m *" + ifaceSplit[len(ifaceSplit)-1]
+	if len(ifaceSplit) < 2 {
+		getopt.Usage()
+		os.Exit(0)
+	}
+	ifacePath := strings.Join(ifaceSplit[0:len(ifaceSplit)-1], ".")
+	ifaceName := ifaceSplit[len(ifaceSplit)-1]
+	recv := "m *" + ifaceName
 
-	fns, err := funcs(iface, *optDir)
+	fns, astImpt, err := funcs(iface, *optDir)
 	if err != nil {
 		fatal(err)
 	}
@@ -427,7 +447,7 @@ func main() {
 		fatal(err)
 	}
 
-	src := genStubs(*optPKGName, recv, fns, implemented)
+	src := genStubs(*optPKGName, recv, fns, implemented, *optDir, astImpt, ifacePath)
 	fmt.Print(string(src))
 }
 

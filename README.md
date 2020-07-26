@@ -1,7 +1,7 @@
 `impl` generates method stubs for implementing an interface.
 
 ```bash
-go get -u github.com/josharian/impl
+go get -u github.com/pedrogameiro/gomock
 ```
 
 Sample usage:

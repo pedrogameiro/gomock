@@ -1,10 +1,16 @@
 ```
 Usage: gomock [-h] [-d value] [-p value] <interface>
-gomock generates mocks for a go interface.
+Generates mocks for a go interface. Full path to package can be used.
+
+<interface>
+    PackageName.InterfaceName
+	PackagePath.InterfaceName
 
 Examples:
-    gomock --package mymocks io.Reader
     gomock hash.Hash
+    gomock github.com/path/package.InterfaceName
+
+    gomock --package mymocks io.Reader
     gomock --directory $GOPATH/src/github.com/josharian/impl hash.Hash
 
  -d, --directory=value

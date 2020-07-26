@@ -1,32 +1,21 @@
-`impl` generates method stubs for implementing an interface.
+```
+Usage: gomock [-h] [-d value] [-p value] <interface>
+gomock generates mocks for a go interface.
 
-```bash
-go get -u github.com/pedrogameiro/gomock
+Examples:
+    gomock --package mymocks io.Reader
+    gomock hash.Hash
+    gomock --directory $GOPATH/src/github.com/josharian/impl hash.Hash
+
+ -d, --directory=value
+             package source directory, useful for vendored code
+ -h, --help  Help
+ -p, --package=value
+             package name
 ```
 
-Sample usage:
-
-```bash
-$ impl 'f *File' io.ReadWriteCloser
-func (f *File) Read(p []byte) (n int, err error) {
-	panic("not implemented")
-}
-
-func (f *File) Write(p []byte) (n int, err error) {
-	panic("not implemented")
-}
-
-func (f *File) Close() error {
-	panic("not implemented")
-}
-
-# You can also provide a full name by specifying the package path.
-# This helps in cases where the interface can't be guessed
-# just from the package name and interface name.
-$ impl 's *Source' golang.org/x/oauth2.TokenSource
-func (s *Source) Token() (*oauth2.Token, error) {
-    panic("not implemented")
-}
+```instal
+go get -u github.com/josharian/impl
 ```
 
-You can use `impl` from Vim with [vim-go-impl](https://github.com/rhysd/vim-go-impl)
+original forked code https://github.com/josharian/impl

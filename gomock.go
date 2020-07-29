@@ -218,11 +218,11 @@ func (p Pkg) funcsig(f *ast.Field, cmap ast.CommentMap) Func {
 	fn := Func{Name: f.Names[0].Name}
 	typ := f.Type.(*ast.FuncType)
 	if typ.Params != nil {
-		for _, field := range typ.Params.List {
-			for i, param := range p.params(field) {
+		for i, field := range typ.Params.List {
+			for _, param := range p.params(field) {
 				// only for method parameters:
 				// assign a blank identifier "_" to an anonymous parameter
-				if param.Name == "" {
+				if param.Name == "" || param.Name == "_" {
 					param.Name = "p" + strconv.Itoa(i)
 				}
 				if param.Type[0:3] == "..." {

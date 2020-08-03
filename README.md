@@ -12,8 +12,8 @@ Examples:
     gomock hash Hash
     gomock golang.org/x/tools/godoc/analysis Link 
 
-    gomock --package testutils io.Reader
-    gomock --directory $GOPATH/src/github.com/pedrogameiro/gomock hash.Hash
+    gomock --package testutils io Reader
+    gomock --directory $GOPATH/src/github.com/pedrogameiro/gomock hash Hash
 
  -d, --directory=value
              package source directory, useful for vendored code

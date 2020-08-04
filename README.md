@@ -23,7 +23,7 @@ Examples:
 ```
 
 ```instal
-go get -u github.com/josharian/impl
+go get -u github.com/pedrogameiro/gomock
 ```
 
 original forked code https://github.com/josharian/impl

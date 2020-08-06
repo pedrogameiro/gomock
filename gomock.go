@@ -328,7 +328,7 @@ var tmplMethodDeclaration = template.Must(template.New("test").Parse(methodDecla
 // genStubs will panic.
 // genStubs won't generate stubs for
 // alrzeady implemented methods of receiver.
-func genStubs(packageName, recv string, fns []Func, implemented map[string]bool, srcDir string, astImpt []*ast.ImportSpec, ifacePath string) []byte {
+func genStubs(packageName, recv string, fns []Func, srcDir string, astImpt []*ast.ImportSpec, ifacePath string) []byte {
 	var buf bytes.Buffer
 
 	buf.Write([]byte("package " + packageName + "\n"))
@@ -448,13 +448,7 @@ func main() {
 		fatal(err)
 	}
 
-	// Get list of already implemented funcs
-	implemented, err := implementedFuncs(fns, recv, *optDir)
-	if err != nil {
-		fatal(err)
-	}
-
-	src := genStubs(*optPKGName, recv, fns, implemented, *optDir, astImpt, ifacePath)
+	src := genStubs(*optPKGName, recv, fns, *optDir, astImpt, ifacePath)
 	fmt.Print(string(src))
 }
 

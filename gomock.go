@@ -303,7 +303,9 @@ const stub = "// {{.Name}} Mock\n" +
 	"({{range .Params}}{{.Name}} {{.Type}}, {{end}})" +
 	"({{range .Res}}{{.Name}} {{.Type}}, {{end}})" +
 	"{\n" +
-	`if {{.RecvVar}}.{{.Name}}Mock == nil { {{.RecvVar}}.T.Fatal("Unimplemented mock {{.Recv}}.{{.Name}} was called") }` + "\n" +
+	`if {{.RecvVar}}.{{.Name}}Mock == nil { ` +
+	`{{.RecvVar}}.T.Log("\n" + string(debug.Stack()) + "\n")` + "\n" +
+	`{{.RecvVar}}.T.Fatal("Unimplemented mock {{.Recv}}.{{.Name}} was called") }` + "\n" +
 	`{{if .Res}}return{{end}} {{.RecvVar}}.{{.Name}}Mock` +
 	`({{range .Params}}{{.Name}}{{if .Variadic }}...{{end}},  {{end}})` +
 	"\n}\n\n"
@@ -368,8 +370,10 @@ func genStubs(packageName, recv string, fns []Func, implemented map[string]bool,
 		recvName := strings.Split(recv, " ")[1][1:]
 		meth := Method{Recv: recv, Func: fn, RecvName: recvName, RecvVar: recvVar}
 
-		tmpl.Execute(&buf, meth)
-
+		err := tmpl.Execute(&buf, meth)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	pretty, err := imports.Process(srcDir+"/mock.go", buf.Bytes(), nil)
